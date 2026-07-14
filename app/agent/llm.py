@@ -30,7 +30,7 @@ from typing import Final
 import structlog
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
-from openai import APIConnectionError, APIStatusError, APITimeoutError
+from openai import APIConnectionError, APIStatusError
 from tenacity import (
     AsyncRetrying,
     RetryCallState,
@@ -118,7 +118,8 @@ def _is_transient(exc: BaseException) -> bool:
     different model group would not fix it and would only hide a real bug or
     a credentials problem, so those propagate to the caller immediately.
     """
-    if isinstance(exc, APITimeoutError | APIConnectionError):
+    # APITimeoutError subclasses APIConnectionError, so one check covers both.
+    if isinstance(exc, APIConnectionError):
         return True
     if isinstance(exc, APIStatusError):
         return exc.status_code == 429 or exc.status_code >= 500
@@ -277,4 +278,9 @@ async def ainvoke_with_fallback(
                 )
 
     assert last_error is not None  # cascade is non-empty, so this branch always sets it
+    logger.error(
+        "llm_cascade_exhausted",
+        groups_tried=[group.value for group in groups_tried],
+        error_type=type(last_error).__name__,
+    )
     raise LLMCascadeExhaustedError(groups_tried, last_error) from last_error
