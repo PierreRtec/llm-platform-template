@@ -69,12 +69,15 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       APP_API_KEY: ${APP_API_KEY}
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: local
     ports: ["8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }
       litellm: { condition: service_healthy }
+      redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      test: ["CMD", "python", "-c", "import urllib.request as r; r.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 12
