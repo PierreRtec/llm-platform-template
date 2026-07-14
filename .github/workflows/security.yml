@@ -20,6 +20,6 @@ jobs:
       # gitleaks-action auto-detects .gitleaks.toml at the repo root (same
       # precedence as the gitleaks CLI), so GITLEAKS_CONFIG is not required
       # here. It is a personal-account repo, so no GITLEAKS_LICENSE either.
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
