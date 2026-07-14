@@ -1078,7 +1078,7 @@ requires-dist = [
     { name = "openinference-instrumentation-langchain", specifier = ">=0.1.67" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.43.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.43.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "redis", specifier = ">=8.0.1" },
     { name = "structlog", specifier = ">=26.1.0" },
