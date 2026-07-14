@@ -83,13 +83,18 @@ def _build_redis_check(settings: Settings) -> ReadinessCheck:
 
 def _build_litellm_check(settings: Settings) -> ReadinessCheck:
     async def _check() -> CheckResult:
+        logger = structlog.get_logger(__name__)
         health_url = httpx.URL(settings.LITELLM_BASE_URL).copy_with(path="/health/liveliness")
         try:
             async with httpx.AsyncClient(timeout=READINESS_TIMEOUT_SECONDS) as http_client:
                 response = await http_client.get(health_url)
                 response.raise_for_status()
+        except TimeoutError as exc:  # readiness must report, never crash the route
+            logger.warning("litellm readiness check timeout", check="litellm", exc_info=exc)
+            return False, "timeout"
         except Exception as exc:  # readiness must report, never crash the route
-            return False, str(exc)
+            logger.warning("litellm readiness check failed", check="litellm", exc_info=exc)
+            return False, "connection failed"
         return True, "ok"
 
     return _check
