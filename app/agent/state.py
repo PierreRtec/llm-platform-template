@@ -28,3 +28,10 @@ class AgentState(TypedDict):
     # Simple per-conversation token budget, optional: not enforced in the
     # MVP graph, a placeholder for a future budget-aware node/guard.
     token_budget: NotRequired[int]
+    # Number of times the `tools` node has run for this invocation. Incremented
+    # by the `tools` node itself; the conditional edge after `agent` checks it
+    # against `MAX_TOOL_ROUNDS` (app/agent/graph.py) to terminate the agent
+    # <-> tools loop gracefully instead of hitting LangGraph's own recursion
+    # limit. Absent from the initial state (existing tests construct
+    # `AgentState` without it); treated as 0 when missing.
+    tool_rounds: NotRequired[int]

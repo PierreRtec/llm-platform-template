@@ -35,6 +35,7 @@ from app.agent.llm import (
     ainvoke_with_fallback,
     get_llm,
 )
+from app.agent.tools.search_aids import search_aids
 from app.core.config import Settings
 
 GATEWAY_URL = "http://litellm.test/v1"
@@ -215,6 +216,42 @@ async def test_ainvoke_with_fallback_escalates_to_premium_after_persistent_500(
     premium_calls = [c for c in route.calls if _request_model(c.request) == "sovereign-premium"]
     assert len(cheap_calls) == 2  # max_attempts_per_group, then escalates
     assert len(premium_calls) == 1  # succeeds on first try after escalation
+
+
+async def test_ainvoke_with_fallback_binds_tools_and_preserves_them_across_escalation(
+    settings: Settings,
+) -> None:
+    """`tools`, when passed, must reach the gateway as the request body's
+    `tools` field (the OpenAI function-calling wire format), and must stay
+    bound after the cascade escalates from `sovereign-cheap` to
+    `sovereign-premium`: rebuilding the client for the new group must not
+    drop the binding."""
+
+    def _route_by_model(request: httpx.Request) -> httpx.Response:
+        model = _request_model(request)
+        if model == "sovereign-cheap":
+            return httpx.Response(500, json=_error_body("internal error", "server_error"))
+        if model == "sovereign-premium":
+            return httpx.Response(200, json=_chat_completion_body("sovereign-premium"))
+        raise AssertionError(f"unexpected model in request: {model!r}")
+
+    with respx.mock(assert_all_called=True) as mock:
+        route = mock.post(CHAT_ENDPOINT).mock(side_effect=_route_by_model)
+
+        result = await ainvoke_with_fallback(
+            MESSAGES,
+            settings=settings,
+            tools=[search_aids],
+            max_attempts_per_group=1,
+        )
+
+    assert result.content == "hello"
+    assert route.call_count == 2  # 1 failure on sovereign-cheap, 1 success on sovereign-premium
+    for call in route.calls:
+        body = json.loads(call.request.content)
+        assert "tools" in body
+        tool_names = {tool_def["function"]["name"] for tool_def in body["tools"]}
+        assert tool_names == {"search_aids"}
 
 
 async def test_ainvoke_with_fallback_propagates_401_immediately_no_retry_no_escalation(

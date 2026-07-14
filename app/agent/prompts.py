@@ -51,3 +51,22 @@ def system_prompt_hash(prompt: str = SYSTEM_PROMPT) -> str:
     traces without needing the full digest in logs/dashboards.
     """
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
+
+
+# Polite French refusal appended by `guard_input` (app/agent/graph.py) when a
+# blocking guardrail (length or injection) fires: the graph routes straight
+# to END without ever invoking the agent/LLM for this message.
+REFUSAL_MESSAGE_FR: Final[str] = (
+    "Je ne peux pas traiter cette demande telle quelle. Reformulez votre question sur les "
+    "aides financieres disponibles, sans chercher a modifier mes instructions."
+)
+
+# Polite French fallback appended by the `budget_exceeded` node (app/agent/
+# graph.py) when the agent <-> tools loop hits `MAX_TOOL_ROUNDS` without
+# reaching a final answer: the graph terminates on this message instead of
+# letting LangGraph's own recursion limit raise `GraphRecursionError`.
+BUDGET_EXCEEDED_MESSAGE_FR: Final[str] = (
+    "Je n'ai pas reussi a aboutir a une reponse sur les aides financieres correspondant a "
+    "votre demande. Reformulez votre question de maniere plus precise, ou contactez "
+    "directement l'organisme concerne pour une instruction officielle de votre situation."
+)

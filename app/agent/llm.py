@@ -28,7 +28,10 @@ from enum import StrEnum
 from typing import Final
 
 import structlog
+from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import BaseMessage
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, APIStatusError
 from tenacity import (
@@ -153,8 +156,14 @@ async def _invoke_group(
     max_tokens: int,
     timeout: float,
     max_attempts: int,
+    tools: Sequence[BaseTool] | None = None,
 ) -> BaseMessage:
     """Invoke a single model group with tenacity retries on transient errors.
+
+    `tools`, when given, is bound to the group's client exactly once (via
+    `bind_tools`), before the tenacity retry loop starts: every attempt (and
+    every retry) against this group reuses the same bound runnable, rather
+    than re-binding per attempt.
 
     On a non-transient error, `retry_if_exception(_is_transient)` makes
     tenacity give up immediately (first attempt only). On retry exhaustion,
@@ -163,6 +172,9 @@ async def _invoke_group(
     `_is_transient` check.
     """
     llm = get_llm(group, settings, temperature=temperature, max_tokens=max_tokens, timeout=timeout)
+    runnable: Runnable[LanguageModelInput, BaseMessage] = (
+        llm.bind_tools(list(tools)) if tools else llm
+    )
 
     def _log_retry(retry_state: RetryCallState) -> None:
         exc = retry_state.outcome.exception() if retry_state.outcome else None
@@ -180,7 +192,7 @@ async def _invoke_group(
         before_sleep=_log_retry,
         reraise=True,
     )
-    result: BaseMessage = await retryer(llm.ainvoke, messages)
+    result: BaseMessage = await retryer(runnable.ainvoke, messages)
     return result
 
 
@@ -194,8 +206,15 @@ async def ainvoke_with_fallback(
     max_tokens: int = DEFAULT_MAX_TOKENS,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     max_attempts_per_group: int = DEFAULT_MAX_ATTEMPTS_PER_GROUP,
+    tools: Sequence[BaseTool] | None = None,
 ) -> BaseMessage:
     """Invoke the gateway with a sovereignty-first escalation cascade.
+
+    `tools`, when given, is bound (via `bind_tools`) to each group's client
+    once per group as the cascade reaches it, not once per retry attempt:
+    escalating from one group to the next rebuilds the client (a fresh
+    `get_llm(...)` call, see `_invoke_group`) and rebinds the same `tools`,
+    so tool availability is preserved across an escalation.
 
     This is an application-level escalation layered *on top of* (not instead
     of) the LiteLLM router's own `num_retries`/`fallbacks`
@@ -263,6 +282,7 @@ async def ainvoke_with_fallback(
                 max_tokens=max_tokens,
                 timeout=timeout,
                 max_attempts=max_attempts_per_group,
+                tools=tools,
             )
         except Exception as exc:
             if not _is_transient(exc):

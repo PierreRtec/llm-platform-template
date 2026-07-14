@@ -17,8 +17,9 @@ from langchain_core.runnables.base import Runnable
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END
 
-from app.agent.graph import build_graph, route_after_guard_input
+from app.agent.graph import MAX_TOOL_ROUNDS, build_graph, route_after_guard_input
 from app.agent.guardrails.pipeline import BLOCKED_FLAG_PREFIX
+from app.agent.prompts import BUDGET_EXCEEDED_MESSAGE_FR
 from app.agent.state import AgentState
 
 THREAD_CONFIG: RunnableConfig = {"configurable": {"thread_id": "test-thread"}}
@@ -119,6 +120,66 @@ class TestAgentToolLoop:
         assert len(tool_messages) == 1
         assert "aide-demo" in tool_messages[0].content
         assert messages[-1].content == "Voici une aide possible pour votre situation."
+
+
+class _AlwaysToolCallLLM(Runnable[LanguageModelInput, BaseMessage]):
+    """A `Runnable` stub that always requests a tool call, never a final answer.
+
+    Used to prove `MAX_TOOL_ROUNDS` cuts the agent <-> tools loop gracefully
+    instead of letting it run until LangGraph's own recursion limit raises
+    `GraphRecursionError`. `call_count` lets the test assert the loop actually
+    stopped, rather than just checking the final message.
+    """
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def invoke(
+        self,
+        input: LanguageModelInput,  # noqa: A002 - matches Runnable.invoke's signature
+        config: RunnableConfig | None = None,
+        **kwargs: object,
+    ) -> BaseMessage:
+        self.call_count += 1
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "search_aids",
+                    "args": {"query": "jeune emploi"},
+                    "id": f"call_{self.call_count}",
+                }
+            ],
+        )
+
+
+class TestBudgetExceeded:
+    def test_persistent_tool_calls_terminate_gracefully_at_max_tool_rounds(self) -> None:
+        llm = _AlwaysToolCallLLM()
+        graph = build_graph(llm=llm, checkpointer=InMemorySaver())
+
+        result = graph.invoke(
+            _initial_state("Quelles aides existent pour un jeune de moins de 25 ans ?"),
+            config=THREAD_CONFIG,
+        )
+
+        final_message = result["messages"][-1]
+        assert isinstance(final_message, AIMessage)
+        assert final_message.content == BUDGET_EXCEEDED_MESSAGE_FR
+        assert result["tool_rounds"] == MAX_TOOL_ROUNDS
+        # the fake LLM is called once per agent pass: MAX_TOOL_ROUNDS tool-requesting
+        # calls, plus at most one more before the budget check cuts the loop.
+        assert llm.call_count <= MAX_TOOL_ROUNDS + 1
+
+
+class TestBuildGraphWithoutCheckpointer:
+    def test_build_graph_without_checkpointer_compiles_and_invokes(self) -> None:
+        llm = FakeMessagesListChatModel(responses=[AIMessage(content="Reponse directe.")])
+        graph = build_graph(llm=llm, checkpointer=None)
+
+        result = graph.invoke(_initial_state("Bonjour, que peux-tu faire ?"))
+
+        assert result["messages"][-1].content == "Reponse directe."
 
 
 class TestRouteAfterGuardInput:
