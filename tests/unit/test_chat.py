@@ -8,6 +8,7 @@ overridden by a small async fake, so these tests never touch the network,
 a real LLM, or a real checkpointer.
 """
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -18,10 +19,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.agent.llm import LLMCascadeExhaustedError, ModelGroup
 from app.api.deps import get_agent_graph
 from app.api.routes.chat import (
     _extract_final_text,
+    _stream_chat_events,
     build_done_event,
+    build_error_event,
     build_token_event,
     format_sse_event,
 )
@@ -53,6 +57,14 @@ class TestFormatSseEvent:
 
         payload = json.loads(line.removeprefix("data: ").strip())
         assert payload["content"] == "éàçù"
+
+
+class TestBuildErrorEvent:
+    def test_wraps_message_with_type_error(self) -> None:
+        assert build_error_event("the request timed out") == {
+            "type": "error",
+            "message": "the request timed out",
+        }
 
 
 class TestExtractFinalText:
@@ -172,16 +184,27 @@ def test_explicit_thread_id_is_echoed_back_and_passed_to_the_graph(
 ) -> None:
     fake_graph = _FakeGraph()
     app.dependency_overrides[get_agent_graph] = lambda: fake_graph
+    thread_id = str(uuid.uuid4())
 
+    response = client.post(
+        "/v1/chat",
+        json={"message": "Bonjour", "thread_id": thread_id},
+        headers={"X-API-Key": "test-api-key"},
+    )
+
+    events = _parse_sse_events(response.text)
+    assert events[-1]["thread_id"] == thread_id
+    assert fake_graph.received_configs[0]["configurable"]["thread_id"] == thread_id
+
+
+def test_non_uuid_thread_id_is_rejected_with_422(client: TestClient) -> None:
     response = client.post(
         "/v1/chat",
         json={"message": "Bonjour", "thread_id": "my-thread-1"},
         headers={"X-API-Key": "test-api-key"},
     )
 
-    events = _parse_sse_events(response.text)
-    assert events[-1]["thread_id"] == "my-thread-1"
-    assert fake_graph.received_configs[0]["configurable"]["thread_id"] == "my-thread-1"
+    assert response.status_code == 422
 
 
 def test_missing_user_id_defaults_to_a_placeholder(app: FastAPI, client: TestClient) -> None:
@@ -202,6 +225,147 @@ def test_blank_message_is_rejected_with_422(client: TestClient) -> None:
     response = client.post("/v1/chat", json={"message": ""}, headers={"X-API-Key": "test-api-key"})
 
     assert response.status_code == 422
+
+
+class _RaisingGraph:
+    """Fake graph whose `astream_events` raises partway (or immediately)."""
+
+    def __init__(self, exc: Exception, tokens_before_failure: int = 0) -> None:
+        self.exc = exc
+        self.tokens_before_failure = tokens_before_failure
+        self.aget_state_was_called = False
+
+    async def astream_events(
+        self,
+        input: Any,  # noqa: A002
+        config: Any = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        for _ in range(self.tokens_before_failure):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": AIMessage(content="partial ")},
+            }
+        raise self.exc
+
+    async def aget_state(self, config: Any, **kwargs: Any) -> Any:
+        # Must never be reached: the exception above should short-circuit
+        # the generator straight to the error-handling branch.
+        self.aget_state_was_called = True
+        raise AssertionError("aget_state should not be called after astream_events raised")
+
+
+class _HangingGraph:
+    """Fake graph whose `astream_events` never completes (simulates a stuck upstream)."""
+
+    def __init__(self, hang_seconds: float = 999.0) -> None:
+        self.hang_seconds = hang_seconds
+        self.aget_state_was_called = False
+
+    async def astream_events(
+        self,
+        input: Any,  # noqa: A002
+        config: Any = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        await asyncio.sleep(self.hang_seconds)
+        yield {"event": "on_chat_model_stream", "data": {"chunk": AIMessage(content="never")}}
+
+    async def aget_state(self, config: Any, **kwargs: Any) -> Any:
+        self.aget_state_was_called = True
+        raise AssertionError("aget_state should not be called after a stream timeout")
+
+
+async def _collect(agen: AsyncIterator[str]) -> list[dict[str, Any]]:
+    lines = [line async for line in agen]
+    return _parse_sse_events("".join(lines))
+
+
+class TestStreamChatEventsErrorHandling:
+    """Direct generator-level tests: no HTTP, no app, matching the pure-function
+    tests above (`build_token_event` etc.) but for `_stream_chat_events`'s
+    error/timeout boundary, which is not otherwise reachable without either a
+    real graph or an over-engineered dependency override."""
+
+    async def test_internal_exception_yields_a_generic_error_event_and_does_not_raise(
+        self,
+    ) -> None:
+        fake_graph = _RaisingGraph(RuntimeError("secret-internal-detail"), tokens_before_failure=1)
+
+        events = await _collect(
+            _stream_chat_events(
+                fake_graph,
+                message="Bonjour",
+                thread_id="thread-1",
+                user_id="user-1",
+                timeout_seconds=5.0,
+            )
+        )
+
+        assert events[-1] == {
+            "type": "error",
+            "message": "an internal error occurred, please retry",
+        }
+        assert not any(event.get("type") == "done" for event in events)
+
+    async def test_llm_cascade_exhausted_yields_the_temporarily_unavailable_message(
+        self,
+    ) -> None:
+        cascade_error = LLMCascadeExhaustedError(
+            groups_tried=[ModelGroup.SOVEREIGN_CHEAP, ModelGroup.SOVEREIGN_PREMIUM],
+            last_error=RuntimeError("gateway unreachable"),
+        )
+        fake_graph = _RaisingGraph(cascade_error)
+
+        events = await _collect(
+            _stream_chat_events(
+                fake_graph,
+                message="Bonjour",
+                thread_id="thread-1",
+                user_id="user-1",
+                timeout_seconds=5.0,
+            )
+        )
+
+        assert events == [
+            {
+                "type": "error",
+                "message": "the assistant is temporarily unavailable, please retry",
+            }
+        ]
+
+    async def test_hanging_graph_times_out_and_yields_a_timeout_error_event(self) -> None:
+        fake_graph = _HangingGraph(hang_seconds=999.0)
+
+        events = await _collect(
+            _stream_chat_events(
+                fake_graph,
+                message="Bonjour",
+                thread_id="thread-1",
+                user_id="user-1",
+                timeout_seconds=0.05,
+            )
+        )
+
+        assert events == [{"type": "error", "message": "the request timed out"}]
+        assert not fake_graph.aget_state_was_called
+
+    async def test_internal_exception_text_never_leaks_into_the_sse_stream(self) -> None:
+        marker = "secret-internal-detail"
+        fake_graph = _RaisingGraph(RuntimeError(marker))
+
+        raw_lines = [
+            line
+            async for line in _stream_chat_events(
+                fake_graph,
+                message="Bonjour",
+                thread_id="thread-1",
+                user_id="user-1",
+                timeout_seconds=5.0,
+            )
+        ]
+
+        assert marker not in "".join(raw_lines)
 
 
 @pytest.fixture(autouse=True)

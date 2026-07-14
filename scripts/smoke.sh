@@ -28,7 +28,7 @@ echo "smoke: waiting for ${BASE_URL}/health/ready ..." >&2
 
 ready=0
 for attempt in $(seq 1 "${READY_RETRIES}"); do
-    if curl -fsS -o /dev/null "${BASE_URL}/health/ready"; then
+    if curl -fsS --max-time 10 -o /dev/null "${BASE_URL}/health/ready"; then
         ready=1
         echo "smoke: /health/ready OK (attempt ${attempt}/${READY_RETRIES})" >&2
         break
@@ -47,7 +47,7 @@ echo "smoke: POST ${BASE_URL}/v1/chat ..." >&2
 response_file="$(mktemp)"
 trap 'rm -f "${response_file}"' EXIT
 
-http_status=$(curl -sS -o "${response_file}" -w "%{http_code}" \
+http_status=$(curl -sS --max-time 90 -o "${response_file}" -w "%{http_code}" \
     -X POST "${BASE_URL}/v1/chat" \
     -H "X-API-Key: ${APP_API_KEY}" \
     -H "Content-Type: application/json" \

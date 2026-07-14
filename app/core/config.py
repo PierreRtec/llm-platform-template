@@ -46,6 +46,15 @@ class Settings(BaseSettings):
     # --- App auth (no default: must be set explicitly, never a placeholder) ---
     APP_API_KEY: str
 
+    # --- Chat streaming (POST /v1/chat) ---
+    # Upper bound on the *total* wall-clock duration of one SSE stream (the
+    # whole astream_events consumption plus the final aget_state call), not a
+    # per-attempt timeout (see app.agent.llm.DEFAULT_TIMEOUT_SECONDS for that
+    # layer). Guards against a graph that hangs (stuck tool call, unhealthy
+    # upstream that neither errors nor completes) holding the connection open
+    # forever.
+    CHAT_STREAM_TIMEOUT_SECONDS: float = 120.0
+
 
 @lru_cache
 def get_settings() -> Settings:
