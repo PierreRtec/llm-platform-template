@@ -106,7 +106,7 @@ def test_second_turn_on_the_same_thread_id_succeeds(http_client: httpx.Client) -
 
 
 def test_chat_response_is_the_happy_path_technical_contract(http_client: httpx.Client) -> None:
-    """Documents the MVP contract explicitly (design doc section 4.2/7).
+    """Documents the MVP contract explicitly (docs/DESIGN.md section 4.2/7).
 
     In mock mode LiteLLM always answers the same fixed string regardless of
     the question asked, so this cannot check the answer *matches* the

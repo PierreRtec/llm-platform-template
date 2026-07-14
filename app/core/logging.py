@@ -1,9 +1,9 @@
 """Structured logging setup (structlog).
 
 JSON in `ci`/`prod`, a readable console renderer in `local`. Trace
-correlation is prepared here via `contextvars` so a future OpenTelemetry
-integration (T8) can bind the real `trace_id` into the logging context
-without this module ever depending on OTel.
+correlation is prepared here via `contextvars` so the OpenTelemetry
+integration (T8, `app.core.telemetry`) can bind the real `trace_id` into the
+logging context without this module ever depending on OTel.
 """
 
 import logging
@@ -46,9 +46,9 @@ def configure_logging(settings: Settings) -> None:
 def bind_trace_id(trace_id: str) -> Iterator[None]:
     """Bind `trace_id` into the structlog context for the duration of a block.
 
-    Placeholder correlation mechanism ahead of the OTel integration in T8:
-    once OpenInference/OTel is wired, the real span trace id will be bound
-    here on every request instead of a caller-supplied one.
+    Called from `app/api/routes/chat.py` with the real OTel span trace id
+    (see `app.core.telemetry` for how that span is exported to Langfuse);
+    a no-op-safe caller-supplied id when telemetry itself is disabled.
     """
     structlog.contextvars.bind_contextvars(trace_id=trace_id)
     try:

@@ -1,6 +1,6 @@
 """Builds the MVP agent graph: guard_input -> agent <-> tools -> END.
 
-MVP scope (design doc section 7): no human-in-the-loop `interrupt()` and no
+MVP scope (docs/DESIGN.md section 7): no human-in-the-loop `interrupt()` and no
 `guard_output` node. The full graph (`guard_input -> agent -> tools/END`,
 with an `interrupt()` before any `requires_approval` tool, then
 `guard_output` before the final answer) lands once the `ToolRegistry` and a

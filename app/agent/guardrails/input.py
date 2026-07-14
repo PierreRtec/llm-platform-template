@@ -8,7 +8,7 @@ aggregated result for the graph's `guard_input` node.
 MVP scope note: regex and heuristics only, no Presidio/NeMo/Llama Guard.
 Architecture is layered so a stronger PII/injection detector can replace
 `check_pii`/`check_injection` internals later without touching the pipeline
-or the graph (design doc section 6, point 2).
+or the graph (docs/DESIGN.md section 6, point 2).
 """
 
 from __future__ import annotations

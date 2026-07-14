@@ -1,6 +1,6 @@
 """POST /v1/chat: SSE-streamed chat over the compiled agent graph.
 
-MVP scope (design doc section 7 / task T7 reduced): only the chat endpoint
+MVP scope (docs/DESIGN.md section 7 / task T7 reduced): only the chat endpoint
 itself. `GET /v1/threads/{id}` (checkpointer state) and
 `POST /v1/threads/{id}/resume` (HITL resume) are out of scope here; they
 land once the full graph (interrupt before `requires_approval` tools) and
@@ -30,8 +30,8 @@ state after streaming finishes (`graph.aget_state`), not accumulated from
 `app.agent.llm.ainvoke_with_fallback`, a plain `ainvoke` call rather than a
 real token-by-token `.astream()` against the gateway, so with the CI
 mock-LiteLLM setup (and possibly some real providers) zero
-`on_chat_model_stream` events may ever fire. The design doc explicitly
-accepts this ("le streaming token par token peut etre grossier"): the
+`on_chat_model_stream` events may ever fire. The docs/DESIGN.md explicitly
+accepts this (token-by-token streaming can end up coarse-grained): the
 minimal contract is at least one `done` event carrying the complete answer
 and the thread id, which reading the graph's own post-run state guarantees
 regardless of how granular (or absent) the upstream token stream was.

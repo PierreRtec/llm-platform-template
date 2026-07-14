@@ -1,7 +1,7 @@
 """Gateway-aware LLM layer: model groups, retries, sovereignty fallback cascade.
 
 Every model in this template is reached through a single self-hosted LiteLLM
-gateway, addressed only by *model group* name (see design doc section 3.3 and
+gateway, addressed only by *model group* name (see docs/DESIGN.md section 3.3 and
 `gateway/litellm.config.yaml`): `sovereign-cheap`, `sovereign-premium`,
 `frontier`, `sovereign-embed`. The application never imports a provider SDK
 (`anthropic`, `mistralai`, a Scaleway client, ...); it only ever talks

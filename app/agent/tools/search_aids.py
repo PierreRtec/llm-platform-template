@@ -1,6 +1,6 @@
 """`search_aids` tool: keyword lookup over the demo financial-aid corpus.
 
-MVP scope (design doc section 7): this is a simple, in-memory, accent- and
+MVP scope (docs/DESIGN.md section 7): this is a simple, in-memory, accent- and
 case-insensitive keyword match over `data/aids_sample.json`, not semantic
 search. The real corpus lookup (pgvector `Store`, embeddings via the
 `sovereign-embed` model group) lands with T4/T5; at that point this module's

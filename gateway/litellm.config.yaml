@@ -1,4 +1,4 @@
-# LiteLLM gateway config, section 3.3 of specs/design-llm-platform-template.md.
+# LiteLLM gateway config, docs/DESIGN.md section 3.3.
 # The app only ever talks to the model_name aliases below (sovereign-cheap,
 # sovereign-premium, frontier, sovereign-embed) via the OpenAI-compatible
 # base URL. Zero provider SDK in application code.

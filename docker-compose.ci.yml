@@ -1,8 +1,12 @@
-# CI / integration-test override. Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait postgres redis litellm
+# CI / integration-test override. Usage (make/ci bring up the full app stack,
+# not just a subset of services):
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
 #
 # - litellm mounts gateway/litellm.ci.yaml instead of the real config: every
 #   model group returns a mock_response, so zero provider API keys are needed.
+# - app gets APP_ENV: ci (declarative only today: no behavior currently
+#   branches on it, but Settings accepts the literal and it keeps process
+#   env truthful about which environment is running).
 # - Langfuse services (langfuse-web, langfuse-worker, clickhouse, minio) are
 #   pushed behind the "langfuse" profile, which is never activated by the
 #   plain `up` command above, so they simply do not start alongside the CI
@@ -13,6 +17,10 @@ services:
   litellm:
     volumes:
       - ./gateway/litellm.ci.yaml:/etc/litellm/config.yaml:ro
+
+  app:
+    environment:
+      APP_ENV: ci
 
   langfuse-web:
     profiles: ["langfuse"]

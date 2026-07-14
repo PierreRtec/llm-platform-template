@@ -3,7 +3,7 @@
 Settings are sourced strictly from environment variables and validated once
 at process boot (see CLAUDE.md non-negotiable #4: no hardcoded config, no
 reading arbitrary files at runtime for secrets). Field names intentionally
-match the environment variable names 1:1 (see design doc section 3.1 and
+match the environment variable names 1:1 (see docs/DESIGN.md section 3.1 and
 docker-compose.yml's `app` service `environment` block) so there is a single
 obvious source of truth for what the app expects to receive.
 """
@@ -11,6 +11,7 @@ obvious source of truth for what the app expects to receive.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str = ""
 
     # --- App auth (no default: must be set explicitly, never a placeholder) ---
-    APP_API_KEY: str
+    APP_API_KEY: str = Field(..., min_length=1)
 
     # --- Chat streaming (POST /v1/chat) ---
     # Upper bound on the *total* wall-clock duration of one SSE stream (the

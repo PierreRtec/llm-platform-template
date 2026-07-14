@@ -1,7 +1,7 @@
 """Graph state schema for the agent.
 
 MVP scope: no `guard_output` verdict field yet (guard_output itself is out
-of scope, design doc section 7); it would land alongside
+of scope, docs/DESIGN.md section 7); it would land alongside
 `app/agent/guardrails/output.py` in a later task.
 """
 

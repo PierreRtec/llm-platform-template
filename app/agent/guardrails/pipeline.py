@@ -3,7 +3,7 @@
 Kept as thin orchestration over `input.py`'s pure checks: no regex, no
 heuristics live here, only composition. `guard_output`/the corresponding
 output pipeline (disclaimer, eligibility-verdict redaction) is out of MVP
-scope (design doc section 7) and will live in `app/agent/guardrails/output.py`
+scope (docs/DESIGN.md section 7) and will live in `app/agent/guardrails/output.py`
 plus a symmetrical `run_output_guardrails` here.
 """
 

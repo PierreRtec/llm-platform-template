@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for the next `lifespan` attempt in the same process).
 
     The checkpointer backing that graph is an `InMemorySaver`: MVP scope
-    (design doc section 7) accepts this explicitly. It is process-local
+    (docs/DESIGN.md section 7) accepts this explicitly. It is process-local
     memory only, lost on restart and never shared across replicas.
     `AsyncPostgresSaver` (T4) replaces it here without changing
     `app/api/routes/chat.py`'s contract.

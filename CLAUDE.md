@@ -5,20 +5,31 @@ Guidance for Claude Code (or any coding agent) working in this repository.
 ## What this repo is
 
 `llm-platform-template`: a local-first template for a production-shaped LLM
-agent platform. FastAPI + LangGraph agent, talking to models only through a
-self-hosted LiteLLM gateway (model groups `sovereign-cheap`,
-`sovereign-premium`, `frontier`; zero provider SDK in application code),
-Postgres-backed memory (checkpointer + pgvector store), layered guardrails,
-human-in-the-loop approval, and tracing into Langfuse via OpenInference/OTel.
-`docker compose up` is the nominal path; Terraform (Scaleway) is a bonus, not
-a prerequisite. See `docs/SPEC.md` and `docs/adr/` for the full design and
-rationale.
+agent platform.
+
+### Target architecture
+
+FastAPI + LangGraph agent, talking to models only through a self-hosted
+LiteLLM gateway (model groups `sovereign-cheap`, `sovereign-premium`,
+`frontier`; zero provider SDK in application code), Postgres-backed memory
+(checkpointer + pgvector store), layered guardrails, human-in-the-loop
+approval, and tracing into Langfuse via OpenInference/OTel. `docker compose
+up` is the nominal path; Terraform (Scaleway) is a bonus, not a prerequisite.
+See `docs/DESIGN.md` for the full design and rationale.
+
+### Current MVP state
+
+`InMemorySaver` backs the checkpointer today (Postgres checkpointer lands in
+T4); no HITL yet (full guardrail/approval flow lands with T6 full). See the
+roadmap in `README.md` for what is done vs. still planned.
 
 ## Language
 
 - This repository is public. **Everything is in English**: code, comments,
   docstrings, commit messages, README, ADRs, PR descriptions. No French
-  anywhere in the tracked files.
+  anywhere in the tracked files, except `docs/DESIGN.md` (working design
+  notes, in French by design) and product-facing prompts (`app/agent/prompts.py`),
+  which are in French because the agent talks to end users in French.
 - No em dash (—) or double-dash-as-punctuation anywhere, in any language, in
   any file this repo tracks. Use a period, comma, or parentheses instead.
 
@@ -90,5 +101,5 @@ to see which task unlocks it.
   hardcoded config, no reading arbitrary files at runtime for secrets.
 - Prefer pure functions for guardrails (`app/agent/guardrails/`) so they stay
   trivially unit-testable without a running graph.
-- Keep tools declared through `ToolRegistry` (`app/agent/tools/registry.py`);
-  the graph must refuse to call anything not registered there.
+- Keep tools declared through `ToolRegistry` (`app/agent/tools/registry.py`,
+  planned, T5); the graph must refuse to call anything not registered there.

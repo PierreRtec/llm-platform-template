@@ -66,8 +66,8 @@ jobs:
 
       - name: pytest (unit only) with coverage gate
         # Threshold is calibrated against the real local coverage (~89% as of
-        # T8) with headroom, per docs/adr coverage decision. Raise it only
-        # after confirming locally with:
+        # T8) with headroom, coverage threshold: see docs/DESIGN.md section 5.
+        # Raise it only after confirming locally with:
         #   uv run pytest -m "not integration" --cov=app --cov-fail-under=80 -q
         run: uv run pytest -m "not integration" --cov=app --cov-fail-under=80
 

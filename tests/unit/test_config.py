@@ -1,7 +1,7 @@
 """Unit tests for app.core.config.Settings.
 
 Settings are sourced strictly from environment variables (no .env file
-reading at runtime); see CLAUDE.md non-negotiable #4 and the design doc
+reading at runtime); see CLAUDE.md non-negotiable #4 and the docs/DESIGN.md
 section 3.1 for the variable list.
 """
 
@@ -14,6 +14,16 @@ from app.core.config import Settings, get_settings
 def test_settings_requires_app_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """APP_API_KEY has no default: booting without it must fail clearly."""
     monkeypatch.delenv("APP_API_KEY", raising=False)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert "APP_API_KEY" in str(exc_info.value)
+
+
+def test_settings_rejects_empty_app_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty string must not satisfy the auth secret requirement either."""
+    monkeypatch.setenv("APP_API_KEY", "")
 
     with pytest.raises(ValidationError) as exc_info:
         Settings(_env_file=None)  # type: ignore[call-arg]
