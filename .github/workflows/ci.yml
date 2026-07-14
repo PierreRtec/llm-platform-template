@@ -1,0 +1,114 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    name: lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+  typecheck:
+    name: typecheck (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: mypy --strict app
+        run: uv run mypy app
+
+  test:
+    name: test (pytest, unit + coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: pytest (unit only) with coverage gate
+        # Threshold is calibrated against the real local coverage (~89% as of
+        # T8) with headroom, per docs/adr coverage decision. Raise it only
+        # after confirming locally with:
+        #   uv run pytest -m "not integration" --cov=app --cov-fail-under=80 -q
+        run: uv run pytest -m "not integration" --cov=app --cov-fail-under=80
+
+  integration:
+    name: integration (docker compose + pytest -m integration + smoke)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Prepare .env
+        run: cp .env.example .env
+
+      - name: docker compose up (CI overlay, mock LiteLLM)
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait
+
+      - name: pytest -m integration
+        run: uv run pytest -m integration -q
+
+      - name: smoke test
+        # APP_API_KEY is not a GitHub Actions env var: it lives in the .env
+        # file copied above (consumed by docker compose for variable
+        # substitution), so source it here before calling the script.
+        run: |
+          set -a
+          source .env
+          set +a
+          ./scripts/smoke.sh
+
+      - name: docker compose logs (app) on failure
+        if: failure()
+        run: docker compose logs app --tail 100
+
+      - name: docker compose down
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
