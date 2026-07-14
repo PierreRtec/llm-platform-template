@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 import psycopg
 import redis.asyncio as redis
+import structlog
 from fastapi import Depends, Header, HTTPException, status
 
 from app.core.config import Settings, get_settings
@@ -39,17 +40,19 @@ async def verify_api_key(
 
 def _build_postgres_check(settings: Settings) -> ReadinessCheck:
     async def _check() -> CheckResult:
+        logger = structlog.get_logger(__name__)
         try:
-            # libpq rounds any connect_timeout below 2s up to 2s (and treats 0/1
-            # as "wait indefinitely" on some builds), so 2 is the effective floor
-            # for a short readiness timeout here.
             conn = await psycopg.AsyncConnection.connect(
                 settings.DATABASE_URL,
-                connect_timeout=2,
+                connect_timeout=POSTGRES_CONNECT_TIMEOUT_SECONDS,
             )
             await conn.close()
+        except TimeoutError as exc:  # readiness must report, never crash the route
+            logger.warning("postgres readiness check timeout", check="postgres", exc_info=exc)
+            return False, "timeout"
         except Exception as exc:  # readiness must report, never crash the route
-            return False, str(exc)
+            logger.warning("postgres readiness check failed", check="postgres", exc_info=exc)
+            return False, "connection failed"
         return True, "ok"
 
     return _check
