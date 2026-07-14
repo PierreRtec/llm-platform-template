@@ -1,0 +1,70 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- uv ---
+# uv.lock IS committed on purpose (reproducible builds). Do not ignore it.
+
+# --- Test / coverage / type-check caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.cache/
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Docker ---
+*.pid
+
+# --- Terraform ---
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!**/*.tfvars.example
+crash.log
+crash.*.log
+
+# --- Eval artifacts ---
+evals/.deepeval/
+evals/deepeval/.deepeval-cache.json
+.deepeval-cache.json
+evals/reports/
+evals/**/*.report.md
+.deepeval_telemetry.txt
+
+# --- Superpowers / agent scratch state ---
+.superpowers/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# --- Logs ---
+*.log

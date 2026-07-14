@@ -1,0 +1,16 @@
+# Gitleaks configuration for llm-platform-template.
+# Extends the default ruleset (github.com/gitleaks/gitleaks default rules)
+# and allowlists only the obviously-fake placeholder values shipped in
+# `.env.example`. Real secrets must never be committed; this file exists
+# so the security.yml workflow (gitleaks over full history) does not
+# false-positive on our own documented placeholders.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder values from .env.example, never real secrets"
+
+regexes = [
+  '''changeme-[a-z0-9-]+''',
+]
