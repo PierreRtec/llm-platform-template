@@ -8,13 +8,16 @@ real network connection.
 
 import hmac
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 import httpx
 import psycopg
 import redis.asyncio as redis
 import structlog
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
+from langgraph.graph.state import CompiledStateGraph
 
+from app.agent.state import AgentState
 from app.core.config import Settings, get_settings
 
 READINESS_TIMEOUT_SECONDS = 1.0
@@ -24,6 +27,9 @@ POSTGRES_CONNECT_TIMEOUT_SECONDS = 2
 # (ok, human-readable detail: "ok" or an error message)
 CheckResult = tuple[bool, str]
 ReadinessCheck = Callable[[], Awaitable[CheckResult]]
+
+# Matches the return type of `app.agent.graph.build_graph`.
+AgentGraph = CompiledStateGraph[AgentState, None, AgentState, AgentState]
 
 
 async def verify_api_key(
@@ -98,6 +104,17 @@ def _build_litellm_check(settings: Settings) -> ReadinessCheck:
         return True, "ok"
 
     return _check
+
+
+def get_agent_graph(request: Request) -> AgentGraph:
+    """Return the compiled agent graph stashed on `app.state` by the lifespan.
+
+    A dependency (rather than routes reading `request.app.state.agent_graph`
+    directly) so tests can swap in a fake graph via
+    `app.dependency_overrides`, the same pattern used by the readiness
+    checks above, instead of poking at app.state.
+    """
+    return cast(AgentGraph, request.app.state.agent_graph)
 
 
 def get_postgres_check(settings: Settings = Depends(get_settings)) -> ReadinessCheck:

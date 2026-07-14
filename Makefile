@@ -21,7 +21,6 @@ test:
 	uv run pytest -m "not integration"
 
 test-int:
-	@test -f docker-compose.ci.yml || { echo "make test-int: not implemented yet (T1/T7)"; exit 1; }
 	docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait
 	uv run pytest -m integration
 
@@ -39,5 +38,4 @@ seed:
 	uv run python scripts/seed_aids.py
 
 smoke:
-	@test -f scripts/smoke.sh || { echo "make smoke: not implemented yet (T7)"; exit 1; }
 	./scripts/smoke.sh
