@@ -1,0 +1,66 @@
+# LiteLLM gateway config, section 3.3 of specs/design-llm-platform-template.md.
+# The app only ever talks to the model_name aliases below (sovereign-cheap,
+# sovereign-premium, frontier, sovereign-embed) via the OpenAI-compatible
+# base URL. Zero provider SDK in application code.
+
+model_list:
+  # sovereign-cheap: Scaleway Generative APIs (OpenAI-compatible, fr-par).
+  # Two physical deployments behind one logical alias (load-balanced).
+  - model_name: sovereign-cheap
+    litellm_params:
+      model: openai/llama-3.3-70b-instruct # verify Scaleway catalogue at build time (rotates fast)
+      api_base: https://api.scaleway.ai/v1
+      api_key: os.environ/SCALEWAY_API_KEY
+  - model_name: sovereign-cheap
+    litellm_params:
+      model: openai/mistral-small-3.2-24b-instruct-2506
+      api_base: https://api.scaleway.ai/v1
+      api_key: os.environ/SCALEWAY_API_KEY
+
+  # sovereign-premium: Mistral La Plateforme
+  - model_name: sovereign-premium
+    litellm_params:
+      model: mistral/mistral-large-latest
+      api_key: os.environ/MISTRAL_API_KEY
+
+  # frontier: Anthropic (documented escalation, kept out of PII paths)
+  - model_name: frontier
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # sovereign-embed: embeddings for the pgvector Store (search + seed script)
+  - model_name: sovereign-embed
+    litellm_params:
+      model: openai/bge-multilingual-gemma2
+      api_base: https://api.scaleway.ai/v1
+      api_key: os.environ/SCALEWAY_API_KEY
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  timeout: 60
+  fallbacks:
+    - sovereign-cheap: ["sovereign-premium"]
+    - sovereign-premium: ["frontier"]
+  redis_host: os.environ/REDIS_HOST
+  redis_port: 6379
+  # DB 1: shared redis instance also backs Langfuse (which always uses DB 0
+  # and has no per-service DB index override), so LiteLLM moves off DB 0
+  # to avoid key collisions. See docker-compose.yml comment on the redis service.
+  redis_db: 1
+
+litellm_settings:
+  drop_params: true
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: 6379
+    ttl: 300
+    db: 1
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: false

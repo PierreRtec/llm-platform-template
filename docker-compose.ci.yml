@@ -1,0 +1,27 @@
+# CI / integration-test override. Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait postgres redis litellm
+#
+# - litellm mounts gateway/litellm.ci.yaml instead of the real config: every
+#   model group returns a mock_response, so zero provider API keys are needed.
+# - Langfuse services (langfuse-web, langfuse-worker, clickhouse, minio) are
+#   pushed behind the "langfuse" profile, which is never activated by the
+#   plain `up` command above, so they simply do not start alongside the CI
+#   integration path. Postgres still gets a `langfuse` database from
+#   scripts/init-db.sh; it just sits unused in CI.
+
+services:
+  litellm:
+    volumes:
+      - ./gateway/litellm.ci.yaml:/etc/litellm/config.yaml:ro
+
+  langfuse-web:
+    profiles: ["langfuse"]
+
+  langfuse-worker:
+    profiles: ["langfuse"]
+
+  clickhouse:
+    profiles: ["langfuse"]
+
+  minio:
+    profiles: ["langfuse"]

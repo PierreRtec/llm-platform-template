@@ -1,0 +1,52 @@
+# CI / integration-test override for gateway/litellm.config.yaml.
+# Every model group returns a static mock_response: zero provider keys,
+# zero network calls, zero tokens spent. Used via docker-compose.ci.yml,
+# which mounts this file in place of the real config.
+#
+# Same model_name aliases as the real config so application code and
+# integration tests never need to know they are talking to a mock.
+
+model_list:
+  - model_name: sovereign-cheap
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: fake-key-not-used-in-mock-mode
+      mock_response: "Mock response from sovereign-cheap (CI)."
+
+  - model_name: sovereign-premium
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: fake-key-not-used-in-mock-mode
+      mock_response: "Mock response from sovereign-premium (CI)."
+
+  - model_name: frontier
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: fake-key-not-used-in-mock-mode
+      mock_response: "Mock response from frontier (CI)."
+
+  - model_name: sovereign-embed
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: fake-key-not-used-in-mock-mode
+      # Embedding mock_response must be a float vector, not a string.
+      mock_response: [0.0, 0.1, 0.2, 0.3]
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 0
+  timeout: 10
+  redis_host: os.environ/REDIS_HOST
+  redis_port: 6379
+  redis_db: 1
+
+litellm_settings:
+  drop_params: true
+  # Cache disabled in CI: keeps the mock override deterministic and removes
+  # the redis dependency from the fast integration path.
+  cache: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: false
