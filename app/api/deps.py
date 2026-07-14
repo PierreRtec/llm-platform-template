@@ -17,6 +17,8 @@ from fastapi import Depends, Header, HTTPException, status
 from app.core.config import Settings, get_settings
 
 READINESS_TIMEOUT_SECONDS = 1.0
+# libpq rounds any connect_timeout below 2s up to 2s, so 2 is the effective floor
+POSTGRES_CONNECT_TIMEOUT_SECONDS = 2
 
 # (ok, human-readable detail: "ok" or an error message)
 CheckResult = tuple[bool, str]
