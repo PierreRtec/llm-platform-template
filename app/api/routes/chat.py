@@ -40,6 +40,30 @@ Memory note: the checkpointer wired in the lifespan (`app/main.py`) is an
 `InMemorySaver`, per-process only, lost on restart, not shared across
 replicas. `AsyncPostgresSaver` (T4) replaces it without changing this
 route's contract.
+
+Telemetry (T8): `_stream_chat_events` opens one OTel span (`chat_request`)
+around the whole graph invocation, tagged with `user_id`, `thread_id`, and
+the system prompt's version/hash (`app/agent/prompts.py`). This is the
+request's own span, not one `LangChainInstrumentor` creates: OpenInference's
+LangChain tracer (`openinference.instrumentation.langchain._tracer`)
+deliberately never attaches its spans to OTel's ambient/"current" context
+(its own comment: doing so "can be hazardous" if a callback never fires to
+detach it), so `opentelemetry.trace.get_current_span()` would never see one
+of its spans from here regardless of timing. It *does* parent a run's span
+on the ambient current span when that run has no LangChain-level parent
+(the graph invocation's own root run) via `context.get_current()`, so
+opening `chat_request` as the current span here still nests every
+LangChain/tool span the graph produces underneath it, in the same trace.
+The span's own trace id is what `app.core.logging.bind_trace_id` binds into
+structlog for the duration (a no-op when telemetry itself is disabled: the
+span is then OTel's default no-op span, `get_span_context().is_valid` is
+`False`, and no trace id is bound). `user_id`/`thread_id`/prompt version and
+hash are *also* passed as LangChain `RunnableConfig` metadata below, which
+`LangChainInstrumentor` attaches to every nested span it creates for this
+run (`thread_id` becomes the `session.id` attribute Langfuse groups traces
+by; the rest lands in each span's `metadata` attribute) -- the two
+mechanisms are complementary, not redundant: one span (ours) vs. every span
+(theirs).
 """
 
 from __future__ import annotations
@@ -48,6 +72,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Mapping
+from contextlib import ExitStack
 from typing import Any, Final
 
 import structlog
@@ -55,14 +80,18 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from opentelemetry import trace
 from pydantic import BaseModel, Field, field_validator
 
 from app.agent.llm import LLMCascadeExhaustedError
+from app.agent.prompts import PROMPT_VERSION, system_prompt_hash
 from app.agent.state import AgentState
 from app.api.deps import AgentGraph, get_agent_graph, verify_api_key
 from app.core.config import Settings, get_settings
+from app.core.logging import bind_trace_id
 
 logger = structlog.get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 # Generic, user-safe error messages for the `error` SSE event. Never the raw
 # exception text: that is only ever logged server-side (see
@@ -185,7 +214,20 @@ async def _stream_chat_events(
     `_classify_error` and the module docstring). The generator always ends
     cleanly, on every path.
     """
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    prompt_hash = system_prompt_hash()
+    config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id},
+        # Picked up by `LangChainInstrumentor` on every nested span it
+        # creates for this run (see the module docstring): `thread_id`
+        # becomes the `session.id` attribute Langfuse groups traces by, the
+        # rest lands in each span's `metadata` attribute.
+        "metadata": {
+            "thread_id": thread_id,
+            "user_id": user_id,
+            "prompt_version": PROMPT_VERSION,
+            "prompt_hash": prompt_hash,
+        },
+    }
     initial_state = AgentState(
         messages=[HumanMessage(content=message)],
         user_id=user_id,
@@ -195,44 +237,57 @@ async def _stream_chat_events(
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout_seconds
 
-    try:
-        events_iter = graph.astream_events(initial_state, config=config, version="v2").__aiter__()
-        while True:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                raise TimeoutError(
-                    f"chat stream exceeded CHAT_STREAM_TIMEOUT_SECONDS ({timeout_seconds}s)"
-                )
+    with tracer.start_as_current_span("chat_request") as span:
+        span.set_attribute("user_id", user_id)
+        span.set_attribute("thread_id", thread_id)
+        span.set_attribute("prompt.version", PROMPT_VERSION)
+        span.set_attribute("prompt.hash", prompt_hash)
+
+        with ExitStack() as correlation:
+            span_context = span.get_span_context()
+            if span_context.is_valid:
+                correlation.enter_context(bind_trace_id(format(span_context.trace_id, "032x")))
+
             try:
-                event = await asyncio.wait_for(events_iter.__anext__(), timeout=remaining)
-            except StopAsyncIteration:
-                break
+                events_iter = graph.astream_events(
+                    initial_state, config=config, version="v2"
+                ).__aiter__()
+                while True:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        raise TimeoutError(
+                            f"chat stream exceeded CHAT_STREAM_TIMEOUT_SECONDS ({timeout_seconds}s)"
+                        )
+                    try:
+                        event = await asyncio.wait_for(events_iter.__anext__(), timeout=remaining)
+                    except StopAsyncIteration:
+                        break
 
-            if event["event"] != "on_chat_model_stream":
-                continue
-            chunk = event["data"].get("chunk")
-            content = getattr(chunk, "content", None) if chunk is not None else None
-            if content:
-                text = content if isinstance(content, str) else str(content)
-                yield format_sse_event(build_token_event(text))
+                    if event["event"] != "on_chat_model_stream":
+                        continue
+                    chunk = event["data"].get("chunk")
+                    content = getattr(chunk, "content", None) if chunk is not None else None
+                    if content:
+                        text = content if isinstance(content, str) else str(content)
+                        yield format_sse_event(build_token_event(text))
 
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-            raise TimeoutError(
-                f"chat stream exceeded CHAT_STREAM_TIMEOUT_SECONDS ({timeout_seconds}s)"
-            )
-        final_state = await asyncio.wait_for(graph.aget_state(config), timeout=remaining)
-        final_text = _extract_final_text(final_state.values)
-        yield format_sse_event(build_done_event(thread_id, final_text))
-    except Exception as exc:  # deliberately broad: this is the stream's error boundary
-        logger.error(
-            "chat_stream_failed",
-            thread_id=thread_id,
-            user_id=user_id,
-            error_type=type(exc).__name__,
-            exc_info=exc,
-        )
-        yield format_sse_event(build_error_event(_classify_error(exc)))
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"chat stream exceeded CHAT_STREAM_TIMEOUT_SECONDS ({timeout_seconds}s)"
+                    )
+                final_state = await asyncio.wait_for(graph.aget_state(config), timeout=remaining)
+                final_text = _extract_final_text(final_state.values)
+                yield format_sse_event(build_done_event(thread_id, final_text))
+            except Exception as exc:  # deliberately broad: this is the stream's error boundary
+                logger.error(
+                    "chat_stream_failed",
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    error_type=type(exc).__name__,
+                    exc_info=exc,
+                )
+                yield format_sse_event(build_error_event(_classify_error(exc)))
 
 
 @router.post("/chat")

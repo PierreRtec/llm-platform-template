@@ -11,15 +11,22 @@ from app.agent.graph import build_graph
 from app.api.routes import chat, health
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.telemetry import setup_telemetry, shutdown_telemetry
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Boot and shutdown hooks for the app.
 
-    Today: load and validate settings, configure structured logging, then
-    compile the agent graph once and stash it on `app.state.agent_graph`
-    (read back per-request via `app.api.deps.get_agent_graph`).
+    Today: load and validate settings, configure structured logging, wire
+    OpenInference/OTel/Langfuse telemetry (T8, no-op without Langfuse
+    keys), then compile the agent graph once and stash it on
+    `app.state.agent_graph` (read back per-request via
+    `app.api.deps.get_agent_graph`). Telemetry is set up *before* the graph
+    is compiled so `LangChainInstrumentor`'s callback-manager patch (see
+    `app/core/telemetry.py`) is already in place for every LangChain
+    `Runnable` the graph builds, not just ones invoked after the first
+    request.
 
     The checkpointer backing that graph is an `InMemorySaver`: MVP scope
     (design doc section 7) accepts this explicitly. It is process-local
@@ -27,20 +34,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     `AsyncPostgresSaver` (T4) replaces it here without changing
     `app/api/routes/chat.py`'s contract.
 
-    Left as clean, intentional extension points for later tasks (no dead
-    code, no premature stubs):
+    Left as a clean, intentional extension point for a later task (no dead
+    code, no premature stub):
 
     - T4: open the Postgres connection pool, run
       `AsyncPostgresSaver`/`AsyncPostgresStore` `.setup()`, stash both on
       `app.state`, and close the pool on shutdown.
-    - T8: start the OpenInference `LangChainInstrumentor` and the OTel
-      tracer provider exporting to Langfuse.
     """
     settings = get_settings()
     configure_logging(settings)
+    setup_telemetry(settings)
     checkpointer = InMemorySaver()
     app.state.agent_graph = build_graph(checkpointer=checkpointer)
-    yield
+    try:
+        yield
+    finally:
+        shutdown_telemetry()
 
 
 def create_app() -> FastAPI:

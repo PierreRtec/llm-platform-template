@@ -38,10 +38,15 @@ class Settings(BaseSettings):
     LITELLM_BASE_URL: str = "http://localhost:4000/v1"
     LITELLM_API_KEY: str = "changeme-litellm-master-key"
 
-    # --- Langfuse (tracing; consumed starting T8, config accepted from T2) ---
+    # --- Langfuse (tracing, T8) ---
+    # Empty by default (matches docker-compose.yml's `${LANGFUSE_PUBLIC_KEY:-}`
+    # app-service default, and docker-compose.ci.yml where Langfuse never
+    # starts): `app.core.telemetry.setup_telemetry` treats an empty public or
+    # secret key as "observability not configured" and no-ops, so the app
+    # boots and serves traffic identically with or without Langfuse.
     LANGFUSE_HOST: str = "http://localhost:3000"
-    LANGFUSE_PUBLIC_KEY: str = "changeme-langfuse-public-key"
-    LANGFUSE_SECRET_KEY: str = "changeme-langfuse-secret-key"
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
 
     # --- App auth (no default: must be set explicitly, never a placeholder) ---
     APP_API_KEY: str
