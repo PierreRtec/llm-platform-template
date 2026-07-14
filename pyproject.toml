@@ -14,7 +14,9 @@ dependencies = [
     "openinference-instrumentation-langchain>=0.1.67",
     "opentelemetry-exporter-otlp>=1.43.0",
     "opentelemetry-sdk>=1.43.0",
+    "psycopg[binary]>=3.2",
     "pydantic-settings>=2.14.2",
+    "redis>=8.0.1",
     "structlog>=26.1.0",
     "tenacity>=9.1.4",
     "uvicorn[standard]>=0.51.0",
@@ -59,6 +61,17 @@ ignore = []
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends()/Header()/Query()/... in argument defaults is the
+# documented DI pattern, not the mutable-default-argument bug B008 targets.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Query",
+    "fastapi.Body",
+    "fastapi.Path",
+]
 
 [tool.ruff.format]
 quote-style = "double"
