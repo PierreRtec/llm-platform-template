@@ -31,6 +31,7 @@ RUN groupadd --system --gid 1000 app \
 WORKDIR /app
 
 COPY --from=builder --chown=app:app /app /app
+COPY --chown=app:app data ./data
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \

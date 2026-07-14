@@ -9,7 +9,6 @@ tests/
 evals/
 docs/
 infra/
-data/
 scripts/
 gateway/
 .env
