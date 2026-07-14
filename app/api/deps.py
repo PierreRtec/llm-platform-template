@@ -60,6 +60,7 @@ def _build_postgres_check(settings: Settings) -> ReadinessCheck:
 
 def _build_redis_check(settings: Settings) -> ReadinessCheck:
     async def _check() -> CheckResult:
+        logger = structlog.get_logger(__name__)
         client = redis.from_url(
             settings.REDIS_URL,
             socket_connect_timeout=READINESS_TIMEOUT_SECONDS,
@@ -67,8 +68,12 @@ def _build_redis_check(settings: Settings) -> ReadinessCheck:
         )
         try:
             await client.ping()
+        except TimeoutError as exc:  # readiness must report, never crash the route
+            logger.warning("redis readiness check timeout", check="redis", exc_info=exc)
+            return False, "timeout"
         except Exception as exc:  # readiness must report, never crash the route
-            return False, str(exc)
+            logger.warning("redis readiness check failed", check="redis", exc_info=exc)
+            return False, "connection failed"
         finally:
             await client.aclose()
         return True, "ok"
