@@ -165,6 +165,65 @@ class TestSetupTelemetryWithFakeKeysEmitsLangChainSpans:
         assert not _langchain_instrumentor.is_instrumented_by_opentelemetry
 
 
+class TestSetupTelemetryIdempotence:
+    """FINDING 1 (post-review): a second real `setup_telemetry` call must not
+    build and instrument an orphaned second `TracerProvider` while a first
+    one is still active; it must warn and no-op instead. After
+    `shutdown_telemetry`, a following call must reconfigure cleanly.
+    """
+
+    def test_double_real_setup_only_configures_once_and_warns(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = Settings(
+            APP_API_KEY="test-key",
+            LANGFUSE_PUBLIC_KEY="fake-public",
+            LANGFUSE_SECRET_KEY="fake-secret",
+        )
+
+        build_calls: list[Settings] = []
+        original_build = telemetry_module.build_tracer_provider
+
+        def _tracking_build(s: Settings) -> TracerProvider:
+            build_calls.append(s)
+            return original_build(s)
+
+        monkeypatch.setattr(telemetry_module, "build_tracer_provider", _tracking_build)
+
+        logged: list[tuple[str, str, dict[str, object]]] = []
+
+        class _StubLogger:
+            def info(self, event: str, **kwargs: object) -> None:
+                logged.append(("info", event, kwargs))
+
+            def warning(self, event: str, **kwargs: object) -> None:
+                logged.append(("warning", event, kwargs))
+
+        monkeypatch.setattr(telemetry_module, "logger", _StubLogger())
+
+        setup_telemetry(settings)
+        assert len(build_calls) == 1
+        assert _langchain_instrumentor.is_instrumented_by_opentelemetry
+
+        setup_telemetry(settings)  # second real call: must no-op, not rebuild
+
+        assert len(build_calls) == 1, "a second real setup must not build a second provider"
+        warnings = [entry for entry in logged if entry[0] == "warning"]
+        assert len(warnings) == 1
+        assert warnings[0][1] == "telemetry_already_configured"
+
+        shutdown_telemetry()
+        assert not _langchain_instrumentor.is_instrumented_by_opentelemetry
+
+        # After shutdown, setup_telemetry reconfigures cleanly (no new warning).
+        logged_before_reconfigure = len(logged)
+        setup_telemetry(settings)
+
+        assert len(build_calls) == 2
+        assert _langchain_instrumentor.is_instrumented_by_opentelemetry
+        assert not any(entry[0] == "warning" for entry in logged[logged_before_reconfigure:])
+
+
 class TestShutdownTelemetry:
     def test_shutdown_without_prior_setup_does_not_raise(self) -> None:
         shutdown_telemetry()  # must not raise even when nothing was set up

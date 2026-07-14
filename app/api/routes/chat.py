@@ -61,7 +61,7 @@ span is then OTel's default no-op span, `get_span_context().is_valid` is
 hash are *also* passed as LangChain `RunnableConfig` metadata below, which
 `LangChainInstrumentor` attaches to every nested span it creates for this
 run (`thread_id` becomes the `session.id` attribute Langfuse groups traces
-by; the rest lands in each span's `metadata` attribute) -- the two
+by; the rest lands in each span's `metadata` attribute). The two
 mechanisms are complementary, not redundant: one span (ours) vs. every span
 (theirs).
 """

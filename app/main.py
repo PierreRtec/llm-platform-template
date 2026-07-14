@@ -28,6 +28,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     `Runnable` the graph builds, not just ones invoked after the first
     request.
 
+    `build_graph` and the `yield` are wrapped in the same `try`/`finally` as
+    `shutdown_telemetry`: if compiling the graph raises (bad config, a
+    dependency not reachable at boot), `setup_telemetry` has already run, so
+    `shutdown_telemetry` still needs to flush/close it. Without this, a
+    boot failure here would leak whatever `setup_telemetry` configured
+    (buffered spans never flushed, `LangChainInstrumentor` left instrumented
+    for the next `lifespan` attempt in the same process).
+
     The checkpointer backing that graph is an `InMemorySaver`: MVP scope
     (design doc section 7) accepts this explicitly. It is process-local
     memory only, lost on restart and never shared across replicas.
@@ -44,9 +52,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(settings)
     setup_telemetry(settings)
-    checkpointer = InMemorySaver()
-    app.state.agent_graph = build_graph(checkpointer=checkpointer)
     try:
+        checkpointer = InMemorySaver()
+        app.state.agent_graph = build_graph(checkpointer=checkpointer)
         yield
     finally:
         shutdown_telemetry()

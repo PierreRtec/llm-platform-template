@@ -30,6 +30,14 @@ This repository is being built incrementally, task by task. Full design notes wi
 - [ ] T12 - Terraform on Scaleway (thin module)
 - [ ] T13 - Final docs
 
+### Telemetry troubleshooting
+
+If `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set but Langfuse itself is
+down or unreachable, the app still boots and serves traffic normally: the
+OTel SDK just logs periodic export failures in the background while it
+retries. To disable telemetry entirely (e.g. in CI, or to silence those
+logs), leave both keys empty.
+
 ## Quickstart (placeholder, will work end-to-end after T7/T8)
 
 ```bash

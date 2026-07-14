@@ -55,6 +55,20 @@ _OTLP_TRACES_PATH: Final[str] = "/api/public/otel/v1/traces"
 # that state explicit and gives `shutdown_telemetry` something to call.
 _langchain_instrumentor = LangChainInstrumentor()
 
+# The `TracerProvider` this module last wired up via `setup_telemetry`
+# (either the real, Langfuse-backed one, or a test's injected one), or
+# `None` when nothing is currently configured. Tracked separately from
+# OTel's own process-wide global (`trace.get_tracer_provider()`) for two
+# reasons: (1) the OTel API silently ignores every `set_tracer_provider`
+# call after the first one, so a second real `setup_telemetry` call would
+# otherwise build and instrument an orphaned second provider that nothing
+# reads from, while any tracer obtained earlier (e.g. `chat.py`'s
+# module-level `tracer`) stays bound to the first, possibly already
+# shut-down provider; (2) tests inject their own `TracerProvider` without
+# ever touching `trace.set_tracer_provider`, so `shutdown_telemetry` cannot
+# rely on the global to find the provider it needs to flush and close.
+_active_provider: TracerProvider | None = None
+
 
 def _otlp_traces_endpoint(langfuse_host: str) -> str:
     """Build Langfuse's OTLP/HTTP traces endpoint from its base host."""
@@ -105,11 +119,30 @@ def setup_telemetry(settings: Settings, *, tracer_provider: TracerProvider | Non
     `build_tracer_provider(settings)` is built, given a `BatchSpanProcessor`
     exporting to Langfuse, and registered as the process-wide provider via
     `trace.set_tracer_provider`.
+
+    Idempotent for the real path: if this is called again with
+    `tracer_provider=None` while a provider from a previous real call is
+    still active (`_active_provider` is not `None`), it logs
+    `telemetry_already_configured` and returns without rebuilding anything.
+    Without this guard, a second real call would build and instrument an
+    orphaned second `TracerProvider` (OTel's global `set_tracer_provider`
+    silently ignores every call after the first), while tracers obtained
+    earlier stay bound to the first provider: two disconnected providers,
+    broken traces. Call `shutdown_telemetry()` first to allow a fresh setup.
     """
+    global _active_provider
+
     if not settings.LANGFUSE_PUBLIC_KEY or not settings.LANGFUSE_SECRET_KEY:
         logger.info(
             "telemetry_disabled",
             reason="LANGFUSE_PUBLIC_KEY and/or LANGFUSE_SECRET_KEY are empty",
+        )
+        return
+
+    if tracer_provider is None and _active_provider is not None:
+        logger.warning(
+            "telemetry_already_configured",
+            reason="setup_telemetry was called again while a provider is still active",
         )
         return
 
@@ -128,6 +161,7 @@ def setup_telemetry(settings: Settings, *, tracer_provider: TracerProvider | Non
         trace.set_tracer_provider(provider)
 
     _langchain_instrumentor.instrument(tracer_provider=provider)
+    _active_provider = provider
     logger.info(
         "telemetry_enabled",
         langfuse_host=settings.LANGFUSE_HOST,
@@ -137,19 +171,28 @@ def setup_telemetry(settings: Settings, *, tracer_provider: TracerProvider | Non
 
 
 def shutdown_telemetry() -> None:
-    """Uninstrument LangChain and flush/close the process-wide tracer provider.
+    """Uninstrument LangChain and flush/close the module's active tracer provider.
 
     Meant for the lifespan's shutdown phase, so any spans still sitting in
     the `BatchSpanProcessor`'s buffer are exported before the process exits
     rather than silently dropped. Safe to call even when `setup_telemetry`
-    no-op'd: uninstrumenting an instrumentor that was never instrumented,
-    and shutting down a `TracerProvider` this module never configured, are
-    both no-ops (the latter guarded by the `isinstance` check below, since
-    the untouched default global provider is not a `TracerProvider`).
+    no-op'd: uninstrumenting an instrumentor that was never instrumented is
+    itself a no-op, and there is simply no `_active_provider` to shut down.
+
+    Uses `_active_provider` (this module's own bookkeeping) rather than
+    `trace.get_tracer_provider()` (OTel's global): the global reflects
+    whatever provider won the process-wide `set_tracer_provider` race, which
+    is not necessarily the one this module last configured (see
+    `_active_provider`'s module-level docstring), and tests that inject a
+    `TracerProvider` never call `set_tracer_provider` at all. Always resets
+    `_active_provider` to `None` afterwards so a following `setup_telemetry`
+    call can reconfigure cleanly.
     """
+    global _active_provider
+
     if _langchain_instrumentor.is_instrumented_by_opentelemetry:
         _langchain_instrumentor.uninstrument()
 
-    provider = trace.get_tracer_provider()
-    if isinstance(provider, TracerProvider):
-        provider.shutdown()
+    if _active_provider is not None:
+        _active_provider.shutdown()
+        _active_provider = None
