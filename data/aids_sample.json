@@ -1,0 +1,82 @@
+[
+  {
+    "id": "aide-demo-001",
+    "title": "Aide demo Jeune Actif",
+    "category": "emploi",
+    "description": "Aide demo destinee aux jeunes de moins de 25 ans en recherche de premier emploi, versee pendant les six premiers mois d'activite pour compenser les frais de transport et de garde d'enfant.",
+    "conditions": "Avoir entre 18 et 25 ans, etre inscrit comme demandeur d'emploi depuis moins de 3 mois, resider en France.",
+    "amount": "150 EUR par mois pendant 6 mois",
+    "source_url": "https://www.exemple.fr/aides/jeune-actif",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-002",
+    "title": "Aide demo Logement Etudiant",
+    "category": "logement",
+    "description": "Aide demo au premier loyer pour les etudiants boursiers qui quittent le foyer familial pour poursuivre des etudes superieures loin de leur domicile.",
+    "conditions": "Etre boursier sur criteres sociaux, avoir moins de 28 ans, signer un bail d'au moins 9 mois.",
+    "amount": "500 EUR verses en une fois",
+    "source_url": "https://www.exemple.fr/aides/logement-etudiant",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-003",
+    "title": "Aide demo Formation Numerique",
+    "category": "formation",
+    "description": "Aide demo au financement d'une formation courte en competences numeriques pour les personnes en reconversion professionnelle.",
+    "conditions": "Etre salarie ou demandeur d'emploi, la formation doit etre eligible au Compte Personnel de Formation, duree minimale de 20 heures.",
+    "amount": "Jusqu'a 1200 EUR de prise en charge",
+    "source_url": "https://www.exemple.fr/aides/formation-numerique",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-004",
+    "title": "Aide demo Mobilite Rurale",
+    "category": "mobilite",
+    "description": "Aide demo a l'achat ou a la location longue duree d'un velo electrique ou d'un abonnement de covoiturage pour les habitants de zones rurales eloignees des transports en commun.",
+    "conditions": "Resider dans une commune de moins de 5000 habitants, justifier d'un trajet domicile-travail de plus de 15 kilometres.",
+    "amount": "400 EUR de subvention",
+    "source_url": "https://www.exemple.fr/aides/mobilite-rurale",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-005",
+    "title": "Aide demo Naissance et Petite Enfance",
+    "category": "famille",
+    "description": "Aide demo versee a la naissance d'un enfant pour financer les premiers equipements de puericulture, ouverte a toutes les familles sans condition de ressources.",
+    "conditions": "Declarer la naissance dans les 3 mois, resider en France au moment de la demande.",
+    "amount": "300 EUR verses en une fois",
+    "source_url": "https://www.exemple.fr/aides/naissance-petite-enfance",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-006",
+    "title": "Aide demo Complementaire Sante Jeunes",
+    "category": "sante",
+    "description": "Aide demo au financement d'une complementaire sante pour les jeunes adultes sans couverture par un contrat collectif d'entreprise.",
+    "conditions": "Avoir entre 18 et 27 ans, ne pas beneficier d'une mutuelle d'entreprise, ressources annuelles sous un plafond fixe chaque annee.",
+    "amount": "20 EUR par mois pendant 12 mois",
+    "source_url": "https://www.exemple.fr/aides/complementaire-sante-jeunes",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-007",
+    "title": "Aide demo Creation d'Entreprise Solo",
+    "category": "entrepreneuriat",
+    "description": "Aide demo destinee aux createurs d'entreprise individuelle pour couvrir les frais d'immatriculation et le premier equipement professionnel.",
+    "conditions": "Immatriculation de moins de 6 mois, statut de micro-entrepreneur ou d'entreprise individuelle, premiere creation d'activite.",
+    "amount": "800 EUR de subvention",
+    "source_url": "https://www.exemple.fr/aides/creation-entreprise-solo",
+    "synthetic": true
+  },
+  {
+    "id": "aide-demo-008",
+    "title": "Aide demo Equipement Numerique Foyer Modeste",
+    "category": "numerique",
+    "description": "Aide demo a l'achat d'un ordinateur portable reconditionne pour les foyers modestes avec un enfant scolarise, afin de faciliter le suivi scolaire a distance.",
+    "conditions": "Avoir un enfant scolarise, ressources du foyer sous un plafond fixe chaque annee, ne pas avoir beneficie de l'aide au cours des 3 dernieres annees.",
+    "amount": "250 EUR de subvention",
+    "source_url": "https://www.exemple.fr/aides/equipement-numerique-foyer-modeste",
+    "synthetic": true
+  }
+]
